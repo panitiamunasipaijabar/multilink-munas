@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi Link Panitia Munas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#fff; --ink:#1d2433; --muted:#6b7385; --line:#e3e7ee;
+    --pri:#0f5c8c; --pri2:#0b4467; --danger:#c0392b;
+    --zoom:#2d8cff; --notulensi:#16a085; --flyer:#e67e22; --surat:#8e44ad; --lainnya:#7f8c8d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;padding:28px 16px 64px;text-align:center}
+  header h1{margin:0 0 6px;font-size:1.5rem}
+  header p{margin:0;opacity:.85;font-size:.95rem}
+  main{max-width:720px;margin:-44px auto 40px;padding:0 14px}
+  .search{width:100%;padding:13px 16px;border:1px solid var(--line);border-radius:12px;font-size:1rem;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+  .tab{border:1px solid var(--line);background:#fff;padding:7px 14px;border-radius:999px;cursor:pointer;font-size:.88rem}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 4px 8px}
+  .link{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;text-decoration:none;color:inherit;transition:.15s}
+  a.link:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.08)}
+  .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:1.2rem;flex:none}
+  .tx{flex:1;min-width:0}
+  .tx b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tx small{color:var(--muted)}
+  .off{opacity:.5}
+  .acts{display:flex;gap:6px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#fff;padding:6px 10px}
+  .btn{background:var(--pri);color:#fff;border-color:var(--pri);padding:10px 16px}
+  .del{color:var(--danger)}
+  .empty{text-align:center;color:var(--muted);padding:30px}
+  footer{text-align:center;font-size:.8rem;color:var(--muted);padding-bottom:30px}
+  footer a{color:var(--muted)}
+  dialog{border:none;border-radius:14px;padding:22px;width:min(440px,92vw);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+  dialog::backdrop{background:rgba(0,0,0,.4)}
+  label{display:block;font-size:.85rem;margin:10px 0 4px;color:var(--muted)}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit}
+  .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  .adminbar{display:flex;justify-content:space-between;align-items:center;background:#fff8e1;border:1px solid #f1d38a;border-radius:10px;padding:10px 12px;margin:14px 0}
+  .err{color:var(--danger);font-size:.85rem;min-height:1em;margin-top:8px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="judulApp">Panitia Munas VIII IPAI</h1>
+  <p>Kumpulan link Zoom, notulensi, flyer, dan surat menyurat</p>
+</header>
+
+<main>
+  <input class="search" id="cari" placeholder="Cari link…">
+  <div class="tabs" id="tabs"></div>
+  <div id="adminBar"></div>
+  <div id="daftar"><div class="empty">Memuat…</div></div>
+</main>
+
+<footer><a href="#" id="loginLink">Masuk admin</a></footer>
+
+<!-- Dialog login -->
+<dialog id="dlgLogin">
+  <h3 style="margin-top:0">Masuk Admin</h3>
+  <label>Email</label><input id="email" type="email">
+  <label>Kata sandi</label><input id="pass" type="password">
+  <div class="err" id="errLogin"></div>
+  <div class="row"><button onclick="dlgLogin.close()">Batal</button><button class="btn" id="btnLogin">Masuk</button></div>
+</dialog>
+
+<!-- Dialog tambah/ubah link -->
+<dialog id="dlgLink">
+  <h3 style="margin-top:0" id="dlgTitle">Tambah Link</h3>
+  <label>Judul</label><input id="fJudul">
+  <label>Kategori</label><select id="fKategori"></select>
+  <label>URL</label><input id="fUrl" type="url" placeholder="https://…">
+  <label>Keterangan (opsional)</label><input id="fKet">
+  <label>Urutan</label><input id="fUrutan" type="number" value="0">
+  <label><input id="fAktif" type="checkbox" checked style="width:auto"> Tampilkan ke publik</label>
+  <div class="err" id="errLink"></div>
+  <div class="row"><button onclick="dlgLink.close()">Batal</button><button class="btn" id="btnSimpan">Simpan</button></div>
+</dialog>
+
+<script>
+/* ============ KONFIGURASI — ISI DENGAN DATA PROYEK SUPABASE ANDA ============ */
+const SUPABASE_URL = "https://mogkinwxneobryeyfldt.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_ZKXKGvcSjlpbx4mC5UP2bg_nmWlC0cy";
+/* ============================================================================ */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const KAT = {
+  zoom:      {nama:"Link Zoom",        ikon:"🎥"},
+  notulensi: {nama:"Notulensi Rapat",  ikon:"📝"},
+  flyer:     {nama:"Flyer",            ikon:"🖼️"},
+  surat:     {nama:"Surat Menyurat",   ikon:"✉️"},
+  lainnya:   {nama:"Lain-lain",        ikon:"🔗"},
+};
+
+let data = [], filterKat = "semua", user = null, editId = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const amanUrl = u => /^https?:\/\//i.test(u) ? u : "#";
+
+// Tab kategori & pilihan form
+function buatTabs(){
+  const items = [["semua","Semua"], ...Object.entries(KAT).map(([k,v])=>[k,v.ikon+" "+v.nama])];
+  $("tabs").innerHTML = items.map(([k,n])=>`<button class="tab ${k===filterKat?"on":""}" data-k="${k}">${n}</button>`).join("");
+  $("tabs").querySelectorAll(".tab").forEach(b=>b.onclick=()=>{filterKat=b.dataset.k;buatTabs();render();});
+}
+$("fKategori").innerHTML = Object.entries(KAT).map(([k,v])=>`<option value="${k}">${v.ikon} ${v.nama}</option>`).join("");
+
+async function muat(){
+  const {data:rows, error} = await sb.from("links").select("*")
+    .order("kategori").order("urutan").order("created_at",{ascending:false});
+  if(error){ $("daftar").innerHTML = `<div class="empty">Gagal memuat: ${esc(error.message)}</div>`; return; }
+  data = rows; render();
+}
+
+function render(){
+  const q = $("cari").value.toLowerCase().trim();
+  const list = data.filter(r =>
+    (filterKat==="semua" || r.kategori===filterKat) &&
+    (!q || (r.judul+" "+(r.keterangan||"")).toLowerCase().includes(q)));
+  if(!list.length){ $("daftar").innerHTML = `<div class="empty">Belum ada link.</div>`; return; }
+
+  let html = "";
+  for(const k of Object.keys(KAT)){
+    const g = list.filter(r=>r.kategori===k);
+    if(!g.length) continue;
+    html += `<h2>${KAT[k].nama}</h2>`;
+    for(const r of g){
+      const isi = `<div class="ic" style="background:var(--${k})">${KAT[k].ikon}</div>
+        <div class="tx"><b>${esc(r.judul)}</b>${r.keterangan?`<small>${esc(r.keterangan)}</small>`:""}</div>`;
+      html += user
+        ? `<div class="link ${r.aktif?"":"off"}">${isi}<div class="acts">
+             <button onclick="window.open('${esc(amanUrl(r.url))}','_blank')">Buka</button>
+             <button onclick="ubah('${r.id}')">Ubah</button>
+             <button class="del" onclick="hapus('${r.id}')">Hapus</button></div></div>`
+        : `<a class="link" href="${esc(amanUrl(r.url))}" target="_blank" rel="noopener">${isi}</a>`;
+    }
+  }
+  $("daftar").innerHTML = html;
+}
+
+// ---------- Admin ----------
+function renderAdmin(){
+  $("adminBar").innerHTML = user
+    ? `<div class="adminbar"><span>Mode admin: <b>${esc(user.email)}</b></span>
+         <span><button class="btn" onclick="tambah()">+ Tambah</button> <button onclick="keluar()">Keluar</button></span></div>`
+    : "";
+  $("loginLink").style.display = user ? "none" : "";
+}
+$("loginLink").onclick = e => { e.preventDefault(); $("errLogin").textContent=""; dlgLogin.showModal(); };
+$("btnLogin").onclick = async () => {
+  const {error} = await sb.auth.signInWithPassword({email:$("email").value, password:$("pass").value});
+  if(error){ $("errLogin").textContent = "Gagal masuk: "+error.message; return; }
+  dlgLogin.close();
+};
+async function keluar(){ await sb.auth.signOut(); }
+
+function isiForm(r={}){
+  $("fJudul").value = r.judul||""; $("fKategori").value = r.kategori||"zoom";
+  $("fUrl").value = r.url||""; $("fKet").value = r.keterangan||"";
+  $("fUrutan").value = r.urutan??0; $("fAktif").checked = r.aktif??true;
+  $("errLink").textContent = "";
+}
+function tambah(){ editId=null; $("dlgTitle").textContent="Tambah Link"; isiForm(); dlgLink.showModal(); }
+function ubah(id){ editId=id; $("dlgTitle").textContent="Ubah Link"; isiForm(data.find(r=>r.id===id)); dlgLink.showModal(); }
+async function hapus(id){
+  if(!confirm("Hapus link ini?")) return;
+  const {error} = await sb.from("links").delete().eq("id",id);
+  if(error) alert(error.message); else muat();
+}
+$("btnSimpan").onclick = async () => {
+  const rec = {
+    judul:$("fJudul").value.trim(), kategori:$("fKategori").value, url:$("fUrl").value.trim(),
+    keterangan:$("fKet").value.trim()||null, urutan:+$("fUrutan").value||0, aktif:$("fAktif").checked
+  };
+  if(!rec.judul || !/^https?:\/\//i.test(rec.url)){ $("errLink").textContent="Judul wajib diisi dan URL harus diawali http:// atau https://"; return; }
+  const q = editId ? sb.from("links").update(rec).eq("id",editId) : sb.from("links").insert(rec);
+  const {error} = await q;
+  if(error){ $("errLink").textContent = error.message; return; }
+  dlgLink.close(); muat();
+};
+
+sb.auth.onAuthStateChange((_e, session) => { user = session?.user || null; renderAdmin(); muat(); });
+$("cari").oninput = render;
+buatTabs();
+</script>
+</body>
+</html>
